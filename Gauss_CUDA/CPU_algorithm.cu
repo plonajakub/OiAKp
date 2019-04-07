@@ -74,7 +74,6 @@ void solveLinearSystem(double **matrixA, double **matrixB, int rank) {
 }
 
 int main(int argc, char *argv[]) {
-	std::cout << "Hello, world!" << std::endl;
 	const int RANK = 4;
 	/*double matrixA[3][3] = {
 		{2, 2, 2, 3},
@@ -88,6 +87,13 @@ int main(int argc, char *argv[]) {
 		{2},
 		{2}
 	};*/
+	/*
+		Solution:	-0.6
+					0.1
+					0.6
+					1.4
+	
+	*/
 	double **matrixA = new double*[RANK];
 	double **matrixB = new double*[RANK];
 	for (int i = 0; i < RANK; ++i) {
@@ -121,6 +127,7 @@ int main(int argc, char *argv[]) {
 	matrixB[3][0] = 2;
 
 	solveLinearSystem(matrixA, matrixB, RANK);
+	std::cout << std::endl << "Solution vector: ";
 	printMatrix(matrixB, RANK, 1);
 	return 0;
 }
