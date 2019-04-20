@@ -1,37 +1,23 @@
 #include <iostream>
-#include <exception>
+#include <stdexcept>
 #include <iomanip>
+#include <cstring>
+
+#include "Utils.h"
 
 // For debug purposes
-#define pAB printMatrix(matrixAB, rankA, rankA + 1)
+#define pAB Utils::printMatrix(matrixAB, degreeOfMatrixA, degreeOfMatrixA + 1)
 
-void printMatrix(double **matrix, int rowNum, int colNum) {
-	std::cout << std::endl;
-	for (int i = 0; i < rowNum; ++i) {
-		std::cout << '[';
-		for (int j = 0; j < colNum - 1; ++j) {
-			std::cout << std::setw(4) << matrix[i][j] << ',';
-		}
-		std::cout << std::setw(4) << matrix[i][colNum - 1] << ']' << std::endl;
-	}
-}
-
-template <class T>
-void swap(T &a, T &b) {
-	T temp = a;
-	a = b;
-	b = temp;
-}
 
 // Operations are being conducted in-place
-void solveLinearSystem(double **matrixAB, int rankA) {
+void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 	int baseRowIdx;
 	double columnDivider, subtractCoeff;
-	pAB;
-	for (int colIdx = 0; colIdx < rankA; ++colIdx) {
+	//pAB;
+	for (int colIdx = 0; colIdx < degreeOfMatrixA; ++colIdx) {
 		// Choose base row
 		baseRowIdx = -1;
-		for (int rowIdx = colIdx; rowIdx < rankA; ++rowIdx) {
+		for (int rowIdx = colIdx; rowIdx < degreeOfMatrixA; ++rowIdx) {
 			if (matrixAB[rowIdx][colIdx] != 0) {
 				baseRowIdx = rowIdx;
 				break;
@@ -43,30 +29,30 @@ void solveLinearSystem(double **matrixAB, int rankA) {
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
 			// Could be implemented as parallel operation (vector exchange)
-			for (int exchColIdx = 0; exchColIdx < rankA + 1; ++exchColIdx) {
-				swap(matrixAB[baseRowIdx][exchColIdx], matrixAB[colIdx][exchColIdx]);
+			for (int exchColIdx = 0; exchColIdx < degreeOfMatrixA + 1; ++exchColIdx) {
+				Utils::swap(matrixAB[baseRowIdx][exchColIdx], matrixAB[colIdx][exchColIdx]);
 			}
 			baseRowIdx = colIdx;
 		}
-		pAB;
+		//pAB;
 		// Chosen row's normalization
 		columnDivider = matrixAB[baseRowIdx][colIdx];
 		// Could be implemented as parallel operation (vector by constant division)
-		for (int colNormIdx = 0; colNormIdx < rankA + 1; ++colNormIdx) {
+		for (int colNormIdx = colIdx; colNormIdx < degreeOfMatrixA + 1; ++colNormIdx) {
 			matrixAB[baseRowIdx][colNormIdx] /= columnDivider;
-			pAB;
+			//pAB;
 		}
 		// Perform row subtraction
 		// Could be implemented as parallel operation (multiple vectors subtraction)
-		for (int rowSubIdx = 0; rowSubIdx < rankA; ++rowSubIdx) {
+		for (int rowSubIdx = 0; rowSubIdx < degreeOfMatrixA; ++rowSubIdx) {
 			if (rowSubIdx == baseRowIdx || matrixAB[rowSubIdx][colIdx] == 0) {
 				continue;
 			}
-			pAB;
+			//pAB;
 			subtractCoeff = matrixAB[rowSubIdx][colIdx];
-			for (int colSubIdx = 0; colSubIdx < rankA + 1; ++colSubIdx) {
+			for (int colSubIdx = colIdx; colSubIdx < degreeOfMatrixA + 1; ++colSubIdx) {
 				matrixAB[rowSubIdx][colSubIdx] -= subtractCoeff * matrixAB[baseRowIdx][colSubIdx];
-				pAB;
+				//pAB;
 			}
 		}
 	}
@@ -125,17 +111,48 @@ int main(int argc, char *argv[]) {
 	matrixAB[2][4] = 2;
 	matrixAB[3][4] = 2;
 
-	solveLinearSystem(matrixAB, RANK);
-	std::cout << std::endl << "Solution vector:" << std::endl;
-	std::cout << '[' << std::setw(4) << matrixAB[0][RANK] << std::endl;
-	for (int i = 1; i < RANK - 1; ++i) {
-		std::cout << std::setw(5) << matrixAB[i][RANK] << std::endl;
+	double **matrixAB_copy = new double*[RANK];
+	for (int i = 0; i < RANK; ++i) {
+		matrixAB_copy[i] = new double[RANK + 1];
+		std::memcpy(matrixAB_copy[i], matrixAB[i], (RANK + 1) * sizeof(double));
 	}
-	std::cout << std::setw(5) << matrixAB[RANK - 1][RANK] << " ]" << std::endl;
 
+	std::cout << "Matrix [A|B]:" << std::endl;
+	Utils::printMatrix(matrixAB, RANK, RANK + 1);
+	std::cout << std::endl;
+
+	std::cout << "Copy of matrix [A|B]:" << std::endl;
+	Utils::printMatrix(matrixAB_copy, RANK, RANK + 1);
+	std::cout << std::endl;
+
+	if (Utils::checkLinearSystem) {
+		std::cout << "Created linear system is correct!" << std::endl;
+	}
+	else {
+		std::cout << "Created linear system is incorrect!" << std::endl;
+	}
+
+	solveLinearSystem(RANK, matrixAB);
+	std::cout << std::endl;
+	std::cout << "Solved linear system:" << std::endl;
+	Utils::printMatrix(matrixAB, RANK, RANK + 1);
+
+	Utils::printSolutionVectorFromMatrix(RANK, matrixAB);
+	std::cout << std::endl;
+	if (Utils::checkLSSolution(RANK, matrixAB_copy, matrixAB)) {
+		std::cout << "Solution vector is correct!" << std::endl;
+	}
+	else {
+		std::cout << "Solution vector is incorrect! (small floating-point operations' errors are possible)" << std::endl;
+		std::cout << "Error: " << Utils::getLSSolutionError(RANK, matrixAB_copy, matrixAB) << std::endl;
+	}
+	
 	for (int i = 0; i < RANK; ++i) {
 		delete[] matrixAB[i];
+		delete matrixAB_copy[i];
 	}
 	delete[] matrixAB;
+	delete[] matrixAB_copy;
+
 	return 0;
 }
