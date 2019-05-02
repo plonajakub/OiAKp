@@ -79,6 +79,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <CudaCompile Include="CPU_algorithm.cu" />
+    <CudaCompile Include="GPU_algorithm.cu" />
     <CudaCompile Include="kernel.cu" />
   </ItemGroup>
   <ItemGroup>

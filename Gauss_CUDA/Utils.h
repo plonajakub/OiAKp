@@ -2,6 +2,11 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <iomanip>
+
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+
 
 class Utils {
 public:
@@ -124,8 +129,9 @@ public:
 		return true;
 	}
 
+	
 	template <class T>
-	static void swap(T &a, T &b) {
+	__host__ __device__ static void swap(T &a, T &b) {
 		T temp = a;
 		a = b;
 		b = temp;
