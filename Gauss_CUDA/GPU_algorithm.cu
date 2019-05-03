@@ -9,16 +9,51 @@
 #define getEl(matrix, type, pitch, row, col) (*((type*)((char*)matrix + pitch * row + sizeof(type) * col)))
 
 
+__global__ void swapMatrixRowsParallel(double *matrix, size_t pitch, int matrixDimX, int rowIdx1, int rowIdx2) {
+	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (colIdx < matrixDimX) {
+		double &el1 = getEl(matrix, double, pitch, rowIdx1, colIdx);
+		double &el2 = getEl(matrix, double, pitch, rowIdx2, colIdx);
+		double temp = el1;
+		el1 = el2;
+		el2 = temp;
+	}
+}
+
+__global__ void divideMatrixRowByConstantParallel(double *matrix, size_t pitch, int matrixDimX, int rowIdx, double divisor) {
+	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (colIdx < matrixDimX) {
+		getEl(matrix, double, pitch, rowIdx, colIdx) /= divisor;
+	}
+}
+
+__global__ void subtracMatrixRows(double *matrix, size_t pitch, int matrixDimX, int subtrahendRowIdx, int minuendRowIdx, double subtractCoeff) {
+	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (colIdx < matrixDimX) {
+		double &subtrahend = getEl(matrix, double, pitch, subtrahendRowIdx, colIdx);
+		double &minuend = getEl(matrix, double, pitch, minuendRowIdx, colIdx);
+		minuend -= subtractCoeff * subtrahend;
+	}
+}
+
+__global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch, int matrixDimX, int matrixDimY, int baseRowIdx, int baseColIdx) {
+	int rowIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (rowIdx < matrixDimY && rowIdx != baseRowIdx && getEl(matrix, double, pitch, rowIdx, baseColIdx) != 0) {
+		double subtractCoeff = getEl(matrix, double, pitch, rowIdx, baseColIdx);
+		subtracMatrixRows << <matrixDimX + 1, 1 >> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
+	}
+}
 
 __global__ void solveLinearSystemParallel(int degreeOfMatrixA, size_t pitch, double *matrixAB) {
 
 	int baseRowIdx;
-	double columnDivider, subtractCoeff;
+	double columnDivider;
 
 	for (int colIdx = 0; colIdx < degreeOfMatrixA; ++colIdx) {
 
 		// Choose base row
 		baseRowIdx = -1;
+		cudaDeviceSynchronize();
 		for (int rowIdx = colIdx; rowIdx < degreeOfMatrixA; ++rowIdx) {
 			if (getEl(matrixAB, double, pitch, rowIdx, colIdx) != 0) {
 				baseRowIdx = rowIdx;
@@ -31,32 +66,23 @@ __global__ void solveLinearSystemParallel(int degreeOfMatrixA, size_t pitch, dou
 		}
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
-			// Could be implemented as parallel operation (vector exchange)
-			for (int exchColIdx = 0; exchColIdx < degreeOfMatrixA + 1; ++exchColIdx) {
-				Utils::swap(getEl(matrixAB, double, pitch, baseRowIdx, exchColIdx),
-					getEl(matrixAB, double, pitch, colIdx, exchColIdx));
-			}
+			// Exchange rows (vectors)
+			swapMatrixRowsParallel << <degreeOfMatrixA + 1, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
 			baseRowIdx = colIdx;
 		}
 
+		cudaDeviceSynchronize();
+
 		// Normalize choosen row
 		columnDivider = getEl(matrixAB, double, pitch, baseRowIdx, colIdx);
-		// Could be implemented as parallel operation (vector by constant division)
-		for (int colNormIdx = colIdx; colNormIdx < degreeOfMatrixA + 1; ++colNormIdx) {
-			getEl(matrixAB, double, pitch, baseRowIdx, colNormIdx) /= columnDivider;
-		}
 
-		// Perform row subtraction
-		// Could be implemented as parallel operation (multiple vectors subtraction)
-		for (int rowSubIdx = 0; rowSubIdx < degreeOfMatrixA; ++rowSubIdx) {
-			if (rowSubIdx == baseRowIdx || getEl(matrixAB, double, pitch, rowSubIdx, colIdx) == 0) {
-				continue;
-			}
-			subtractCoeff = getEl(matrixAB, double, pitch, rowSubIdx, colIdx);
-			for (int colSubIdx = colIdx; colSubIdx < degreeOfMatrixA + 1; ++colSubIdx) {
-				getEl(matrixAB, double, pitch, rowSubIdx, colSubIdx) -= subtractCoeff * getEl(matrixAB, double, pitch, baseRowIdx, colSubIdx);
-			}
-		}
+		// Divide row (vector) by constant
+		divideMatrixRowByConstantParallel << <degreeOfMatrixA + 1, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
+
+		cudaDeviceSynchronize();
+
+		// Perform multiple rows (vectors) subtraction
+		performMatrixVerticalRowSubtraction << <degreeOfMatrixA, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
 
@@ -165,8 +191,8 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// Kernel lunch
-	solveLinearSystemParallel<<<1, 1>>>(MATRIX_DEGREE, pitch, devMatrixAB);
+	// Kernel launch
+	solveLinearSystemParallel << <1, 1 >> > (MATRIX_DEGREE, pitch, devMatrixAB);
 
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess) {
@@ -177,7 +203,7 @@ int main(int argc, char *argv[]) {
 	// Wait for device to complete the work
 	cudaStatus = cudaDeviceSynchronize();
 	if (cudaStatus != cudaSuccess) {
-		std::cout << "cudaDeviceSynchronize returned error code " << cudaStatus << 
+		std::cout << "cudaDeviceSynchronize returned error code " << cudaStatus <<
 			" after launching solveLinearSystemParallel! " << std::endl;
 		goto Error;
 	}
@@ -194,7 +220,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Device memory cleanup
-	Error:
+Error:
 	cudaFree(devMatrixAB);
 
 	// Device reset for profiling tools
