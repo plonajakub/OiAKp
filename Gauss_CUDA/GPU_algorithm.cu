@@ -8,6 +8,9 @@
 
 #define getEl(matrix, type, pitch, row, col) (*((type*)((char*)matrix + pitch * row + sizeof(type) * col)))
 
+enum Result {
+	SUCCESS, CUDA_ERROR, ALGORITHM_ERROR
+};
 
 __global__ void swapMatrixRowsParallel(double *matrix, size_t pitch, int matrixDimX, int rowIdx1, int rowIdx2) {
 	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -44,7 +47,7 @@ __global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch
 	}
 }
 
-__global__ void solveLinearSystemParallel(int degreeOfMatrixA, size_t pitch, double *matrixAB) {
+__global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, double *matrixAB, Result &result_callback) {
 
 	int baseRowIdx;
 	double columnDivider;
@@ -61,7 +64,7 @@ __global__ void solveLinearSystemParallel(int degreeOfMatrixA, size_t pitch, dou
 			}
 		}
 		if (baseRowIdx == -1) {
-			/*throw std::invalid_argument("Column can't contain zeros only");*/
+			result_callback = Result::ALGORITHM_ERROR;
 			return;
 		}
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
@@ -85,6 +88,88 @@ __global__ void solveLinearSystemParallel(int degreeOfMatrixA, size_t pitch, dou
 		performMatrixVerticalRowSubtraction << <degreeOfMatrixA, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
+
+Result solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
+	// Error code holder
+	cudaError_t cudaStatus;
+
+	Result result = Result::SUCCESS;
+
+	// Device memory allocation
+	double *devMatrixAB;
+	size_t pitch;
+	cudaStatus = cudaMallocPitch(&devMatrixAB, &pitch,
+		(degreeOfMatrixA + 1) * sizeof(double), degreeOfMatrixA);
+
+	if (cudaStatus != cudaSuccess) {
+		std::cout << "cudaMallocPitch failed!" << std::endl;
+		result = Result::CUDA_ERROR;
+		goto Cleanup;
+	}
+
+	// Copy memory from host to device
+	for (int i = 0; i < degreeOfMatrixA; ++i) {
+		cudaStatus = cudaMemcpy((void*)((char*)devMatrixAB + i * pitch), matrixAB[i],
+			(degreeOfMatrixA + 1) * sizeof(double), cudaMemcpyHostToDevice);
+
+		if (cudaStatus != cudaSuccess) {
+			std::cout << "cudaMemcpy failed!" << std::endl;
+			result = Result::CUDA_ERROR;
+			goto Cleanup;
+		}
+	}
+
+	// Kernel launch
+	solveLinearSystemKernel << <1, 1 >> > (degreeOfMatrixA, pitch, devMatrixAB, result);
+
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess) {
+		std::cout << "solveLinearSystemKernel failed: " << cudaGetErrorString(cudaStatus) << std::endl;
+		result = Result::CUDA_ERROR;
+		goto Cleanup;
+	}
+
+	// Wait for device to complete the work
+	cudaStatus = cudaDeviceSynchronize();
+
+	if (cudaStatus != cudaSuccess) {
+		std::cout << "cudaDeviceSynchronize returned error code " << cudaStatus <<
+			" after launching solveLinearSystemKernel! " << std::endl;
+		result = Result::CUDA_ERROR;
+		goto Cleanup;
+	}
+
+	if (result == Result::ALGORITHM_ERROR) {
+		std::cout << "Error during solving the linear system" << std::endl;
+		goto Cleanup;
+	}
+
+	// Copy memory from device to host
+	for (int i = 0; i < degreeOfMatrixA; ++i) {
+		cudaStatus = cudaMemcpy(matrixAB[i], (void*)((char*)devMatrixAB + i * pitch),
+			(degreeOfMatrixA + 1) * sizeof(double), cudaMemcpyDeviceToHost);
+
+		if (cudaStatus != cudaSuccess) {
+			std::cout << "cudaMemcpy failed!" << std::endl;
+			result = Result::CUDA_ERROR;
+			goto Cleanup;
+		}
+	}
+
+Cleanup:
+	// Device memory cleanup
+	cudaFree(devMatrixAB);
+
+	// Device reset for profiling tools
+	cudaStatus = cudaDeviceReset();
+	if (cudaStatus != cudaSuccess) {
+		std::cout << "cudaDeviceReset failed!" << std::endl;
+		result = Result::CUDA_ERROR;
+	}
+
+	return result;
+}
+
 
 int main(int argc, char *argv[]) {
 
@@ -166,68 +251,22 @@ int main(int argc, char *argv[]) {
 		std::cout << "Created linear system is incorrect!" << std::endl;
 	}
 
-	// Error code holder
-	cudaError_t cudaStatus;
+	// Solve linear system on GPU
+	Result result;
+	result = solveLinearSystemParallel(MATRIX_DEGREE, matrixAB);
 
-	// Device memory allocation
-	double* devMatrixAB;
-	size_t pitch;
-	cudaStatus = cudaMallocPitch(&devMatrixAB, &pitch,
-		(MATRIX_DEGREE + 1) * sizeof(double), MATRIX_DEGREE);
-
-	if (cudaStatus != cudaSuccess) {
-		std::cout << "cudaMallocPitch failed!" << std::endl;
-		goto Error;
-	}
-
-	// Copy memory from host to device
-	for (int i = 0; i < MATRIX_DEGREE; ++i) {
-		cudaStatus = cudaMemcpy((void *)((char*)devMatrixAB + i * pitch), matrixAB[i],
-			(MATRIX_DEGREE + 1) * sizeof(double), cudaMemcpyHostToDevice);
-
-		if (cudaStatus != cudaSuccess) {
-			std::cout << "cudaMemcpy failed!" << std::endl;
-			goto Error;
-		}
-	}
-
-	// Kernel launch
-	solveLinearSystemParallel << <1, 1 >> > (MATRIX_DEGREE, pitch, devMatrixAB);
-
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess) {
-		std::cout << "solveLinearSystemParallel kernel failed: " << cudaGetErrorString(cudaStatus) << std::endl;
-		goto Error;
-	}
-
-	// Wait for device to complete the work
-	cudaStatus = cudaDeviceSynchronize();
-	if (cudaStatus != cudaSuccess) {
-		std::cout << "cudaDeviceSynchronize returned error code " << cudaStatus <<
-			" after launching solveLinearSystemParallel! " << std::endl;
-		goto Error;
-	}
-
-	// Copy memory from device to host
-	for (int i = 0; i < MATRIX_DEGREE; ++i) {
-		cudaStatus = cudaMemcpy(matrixAB[i], (void*)((char*)devMatrixAB + i * pitch),
-			(MATRIX_DEGREE + 1) * sizeof(double), cudaMemcpyDeviceToHost);
-
-		if (cudaStatus != cudaSuccess) {
-			std::cout << "cudaMemcpy failed!" << std::endl;
-			goto Error;
-		}
-	}
-
-	// Device memory cleanup
-Error:
-	cudaFree(devMatrixAB);
-
-	// Device reset for profiling tools
-	cudaStatus = cudaDeviceReset();
-	if (cudaStatus != cudaSuccess) {
-		std::cout << "cudaDeviceReset failed!" << std::endl;
-		return 1;
+	switch (result) {
+	case SUCCESS:
+		std::cout << "solverLinearSystemParallel() returned without errors!" << std::endl;
+		break;
+	case CUDA_ERROR:
+		std::cout << "solverLinearSystemParallel() returned cuda error!" << std::endl;
+		break;
+	case ALGORITHM_ERROR:
+		std::cout << "solverLinearSystemParallel() returned algorithm error!" << std::endl;
+		break;
+	default:
+		break;
 	}
 
 	// Present results
