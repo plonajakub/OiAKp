@@ -46,7 +46,10 @@ __global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch
 		double subtractCoeff = getEl(matrix, double, pitch, rowIdx, baseColIdx);
 		const int threadsPerBlock = 32;
 		const int blocksPerGridDimX = ceil((matrixDimX) / (double)threadsPerBlock);
-		subtracMatrixRows << <blocksPerGridDimX, threadsPerBlock>> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
+		cudaStream_t stream;
+		cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+		subtracMatrixRows << <blocksPerGridDimX, threadsPerBlock, 0, stream>> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
+		cudaStreamDestroy(stream);
 	}
 }
 
