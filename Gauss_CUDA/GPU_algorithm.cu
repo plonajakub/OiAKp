@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstring>
+#include <cmath>
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
@@ -43,11 +44,17 @@ __global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch
 	int rowIdx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (rowIdx < matrixDimY && rowIdx != baseRowIdx && getEl(matrix, double, pitch, rowIdx, baseColIdx) != 0) {
 		double subtractCoeff = getEl(matrix, double, pitch, rowIdx, baseColIdx);
-		subtracMatrixRows << <matrixDimX + 1, 1 >> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
+		const int threadsPerBlock = 32;
+		const int blocksPerGridDimX = ceil((matrixDimX) / (double)threadsPerBlock);
+		subtracMatrixRows << <blocksPerGridDimX, threadsPerBlock>> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
 	}
 }
 
 __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, double *matrixAB, Result &result_callback) {
+
+	const int threadsPerBlock = 32;
+	const int blocksPerGridDimX = ceil((degreeOfMatrixA + 1) / (double)threadsPerBlock);
+	const int blocksPerGridDimY = ceil(degreeOfMatrixA / (double)threadsPerBlock);
 
 	int baseRowIdx;
 	double columnDivider;
@@ -70,7 +77,7 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
 			// Exchange rows (vectors)
-			swapMatrixRowsParallel << <degreeOfMatrixA + 1, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
+			swapMatrixRowsParallel << <blocksPerGridDimX, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
 			baseRowIdx = colIdx;
 		}
 
@@ -80,12 +87,12 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		columnDivider = getEl(matrixAB, double, pitch, baseRowIdx, colIdx);
 
 		// Divide row (vector) by constant
-		divideMatrixRowByConstantParallel << <degreeOfMatrixA + 1, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
+		divideMatrixRowByConstantParallel << <blocksPerGridDimX, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
 
 		cudaDeviceSynchronize();
 
 		// Perform multiple rows (vectors) subtraction
-		performMatrixVerticalRowSubtraction << <degreeOfMatrixA, 1 >> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
+		performMatrixVerticalRowSubtraction << <blocksPerGridDimY, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
 
