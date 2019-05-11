@@ -3,15 +3,140 @@
 #include <cmath>
 #include <stdexcept>
 #include <iomanip>
+#include <random>
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+
+#define min(a, b) ((b >= a) ? a : b)
 
 
 class Utils {
 public:
 	Utils();
 	~Utils();
+
+	class UniRand
+	{
+	public:
+		static UniRand &Get() {
+			static UniRand obj;
+			return obj;
+		};
+		int RandInt(int from, int to) {
+			return std::uniform_int_distribution<int>{from, to}(mt);
+		};
+		double RandDouble(double from, double to) {
+			return std::uniform_real_distribution<double>{from, to}(mt);
+		};
+		std::mt19937 &Generator() {
+			return mt;
+		};
+	private:
+		UniRand()
+			: mt(std::random_device()())
+		{};
+		UniRand(UniRand const&);
+		void operator=(UniRand const&);
+
+		std::mt19937 mt;
+	};
+
+	static void DeleteMatrix(double **matrix, int size) {
+		if (matrix == nullptr)
+			return;
+
+		for (int i(size - 1); i >= 0; i--)
+			delete[] matrix[i];
+		delete matrix;
+		matrix = nullptr;
+	}
+
+	static double **DuplicateMatrix(double **matrix, int row_size, int col_size) {
+		double **cp = new double*[row_size];
+
+		for (int i(0); i < row_size; i++)
+		{
+			cp[i] = new double[col_size];
+			for (int j(0); j < col_size; j++)
+				cp[i][j] = matrix[i][j];
+		}
+
+		return cp;
+	}
+
+	static bool Determinant(double **matrix, int size) {
+		bool solvable(true);
+		double **mult = DuplicateMatrix(matrix, size, size);
+
+		int max;
+		double m;
+		for (int i(0); i < size - 1; i++)
+		{
+			//place highest val from M = {m[x][i]: x = <i, size-2>} into m[i][i]
+			max = i;
+			for (int j(i); j < size; j++)
+				if (abs(mult[j][i]) > abs(mult[max][i]))
+					max = j;
+			//swap
+			swap(mult[max], mult[i]);
+
+			//for every row reduce every row bellow
+			for (int j(i + 1); j < size; j++)
+			{
+				//max element(diagonal) == 0 => det == 0
+				if (mult[i][i] == 0)
+				{
+					solvable = false;
+					break;
+				}
+				//already reduced
+				if (mult[j][i] == 0)
+					continue;
+
+				m = mult[j][i] / mult[i][i];
+				for (int k(min(j + 1, size - 1)); k >= i; k--)
+					mult[j][k] -= m * mult[i][k];
+			}
+			if (!solvable)
+				break;
+		}
+		if (abs(mult[size - 1][size - 1]) < 0.001)
+			solvable = false;
+
+		/*
+		printMatrix(st_matrix{ mult , size });
+		double det = mult[0][0];
+		for (int i(1); i < size; i++)
+			det *= mult[i][i];
+		if (det < 0.1 && det > -0.1)
+			det = 0;
+		std::cout << "det: " << det << std::endl;
+		/**/
+
+		DeleteMatrix(mult, size);
+
+		return solvable;
+	}
+
+	//generate random matrix with one solution
+	static void GenMatrix(double ***matrix, int size_new, int size_old) {
+		DeleteMatrix(*matrix, size_old);
+
+		(*matrix) = new double*[size_new];
+		for (int i(0); i < size_new; i++)
+			(*matrix)[i] = new double[size_new + 1];
+
+		do {
+			for (int i(0); i < size_new; i++)
+			{
+				for (int j(0); j <= size_new; j++)
+				{
+					(*matrix)[i][j] = UniRand::Get().RandInt(1, 100000);
+				}
+			}
+		} while (!Determinant(*matrix, size_new));
+	}
 
 	/* Checks if provided linear system has
 	 * only one solution vector (calculates rank of matrix [A|B])
@@ -86,9 +211,9 @@ public:
 
 	/*
 	 * Calulates error for provided linear system's solution
-	 * 
+	 *
 	 * solution has the same size as matrixAB and is in form of [I|X]
-	 * 
+	 *
 	 * Returns absolute error (sum of each equation's absolute error)
 	 */
 	template <class T>
@@ -129,7 +254,7 @@ public:
 		return true;
 	}
 
-	
+
 	template <class T>
 	__host__ __device__ static void swap(T &a, T &b) {
 		T temp = a;
