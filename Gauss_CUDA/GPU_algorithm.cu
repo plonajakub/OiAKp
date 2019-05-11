@@ -1,17 +1,14 @@
 #include <iostream>
 #include <cstring>
-#include <cmath>
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "cuda_profiler_api.h"
 
 #include "Utils.h"
+#include "GPU_algorithm.cuh"
 
 #define getEl(matrix, type, pitch, row, col) (*((type*)((char*)matrix + pitch * row + sizeof(type) * col)))
-
-enum Result {
-	SUCCESS, CUDA_ERROR, ALGORITHM_ERROR
-};
 
 __global__ void swapMatrixRowsParallel(double *matrix, size_t pitch, int matrixDimX, int rowIdx1, int rowIdx2) {
 	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -48,7 +45,7 @@ __global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch
 		const int blocksPerGridDimX = ceil((matrixDimX) / (double)threadsPerBlock);
 		cudaStream_t stream;
 		cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-		subtracMatrixRows << <blocksPerGridDimX, threadsPerBlock, 0, stream>> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
+		subtracMatrixRows << <blocksPerGridDimX, threadsPerBlock, 0, stream >> > (matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtractCoeff);
 		cudaStreamDestroy(stream);
 	}
 }
@@ -80,7 +77,7 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
 			// Exchange rows (vectors)
-			swapMatrixRowsParallel << <blocksPerGridDimX, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
+			swapMatrixRowsParallel << <blocksPerGridDimX, threadsPerBlock >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
 			baseRowIdx = colIdx;
 		}
 
@@ -90,20 +87,23 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		columnDivider = getEl(matrixAB, double, pitch, baseRowIdx, colIdx);
 
 		// Divide row (vector) by constant
-		divideMatrixRowByConstantParallel << <blocksPerGridDimX, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
+		divideMatrixRowByConstantParallel << <blocksPerGridDimX, threadsPerBlock >> > (matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
 
 		cudaDeviceSynchronize();
 
 		// Perform multiple rows (vectors) subtraction
-		performMatrixVerticalRowSubtraction << <blocksPerGridDimY, threadsPerBlock>> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
+		performMatrixVerticalRowSubtraction << <blocksPerGridDimY, threadsPerBlock >> > (matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
 
-Result solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
+gpu_info solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 	// Error code holder
 	cudaError_t cudaStatus;
 
-	Result result = Result::SUCCESS;
+	gpu_info info = { Result::SUCCESS, 0.0 }; 
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
 
 	// Device memory allocation
 	double *devMatrixAB;
@@ -113,7 +113,7 @@ Result solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 
 	if (cudaStatus != cudaSuccess) {
 		std::cout << "cudaMallocPitch failed!" << std::endl;
-		result = Result::CUDA_ERROR;
+		info.result = Result::CUDA_ERROR;
 		goto Cleanup;
 	}
 
@@ -124,32 +124,42 @@ Result solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 
 		if (cudaStatus != cudaSuccess) {
 			std::cout << "cudaMemcpy failed!" << std::endl;
-			result = Result::CUDA_ERROR;
+			info.result = Result::CUDA_ERROR;
 			goto Cleanup;
 		}
 	}
 
+	//cudaProfilerStart();
+	//start time measurement
+	cudaEventRecord(start);
+
 	// Kernel launch
-	solveLinearSystemKernel << <1, 1 >> > (degreeOfMatrixA, pitch, devMatrixAB, result);
+	solveLinearSystemKernel << <1, 1 >> > (degreeOfMatrixA, pitch, devMatrixAB, info.result); 
 
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess) {
 		std::cout << "solveLinearSystemKernel failed: " << cudaGetErrorString(cudaStatus) << std::endl;
-		result = Result::CUDA_ERROR;
+		info.result = Result::CUDA_ERROR;
 		goto Cleanup;
 	}
 
 	// Wait for device to complete the work
 	cudaStatus = cudaDeviceSynchronize();
 
+	//stop time measurement
+	cudaEventRecord(stop);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&info.time, start, stop);
+	//cudaProfilerStop();
+
 	if (cudaStatus != cudaSuccess) {
 		std::cout << "cudaDeviceSynchronize returned error code " << cudaStatus <<
 			" after launching solveLinearSystemKernel! " << std::endl;
-		result = Result::CUDA_ERROR;
+		info.result = Result::CUDA_ERROR;
 		goto Cleanup;
 	}
 
-	if (result == Result::ALGORITHM_ERROR) {
+	if (info.result == Result::ALGORITHM_ERROR) {
 		std::cout << "Error during solving the linear system" << std::endl;
 		goto Cleanup;
 	}
@@ -161,7 +171,7 @@ Result solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 
 		if (cudaStatus != cudaSuccess) {
 			std::cout << "cudaMemcpy failed!" << std::endl;
-			result = Result::CUDA_ERROR;
+			info.result = Result::CUDA_ERROR;
 			goto Cleanup;
 		}
 	}
@@ -174,13 +184,12 @@ Cleanup:
 	cudaStatus = cudaDeviceReset();
 	if (cudaStatus != cudaSuccess) {
 		std::cout << "cudaDeviceReset failed!" << std::endl;
-		result = Result::CUDA_ERROR;
+		info.result = Result::CUDA_ERROR;
 	}
-
-	return result;
+	return info;
 }
 
-
+/*
 int main(int argc, char *argv[]) {
 
 	// Matrix size is MATRIX_DEGREE x (MATRIX_DEGREE + 1)
@@ -207,6 +216,7 @@ int main(int argc, char *argv[]) {
 	*/
 
 	// Host allocation
+	/*
 	double **matrixAB = new double*[MATRIX_DEGREE];
 	for (int i = 0; i < MATRIX_DEGREE; ++i) {
 		matrixAB[i] = new double[MATRIX_DEGREE + 1];
@@ -304,3 +314,4 @@ int main(int argc, char *argv[]) {
 
 	return 0;
 }
+/**/

@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "Utils.h"
+#include "CPU_algorithm.cuh"
 
 // For debug purposes
 #define pAB Utils::printMatrix(matrixAB, degreeOfMatrixA, degreeOfMatrixA + 1)

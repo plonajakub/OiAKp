@@ -1,0 +1,1 @@
+void solveLinearSystem(int degreeOfMatrixA, double **matrixAB);
