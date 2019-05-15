@@ -86,8 +86,11 @@
     <CudaCompile Include="CPU_algorithm.cu" />
     <CudaCompile Include="GPU_algorithm.cu" />
     <CudaCompile Include="kernel.cu" />
+    <CudaCompile Include="main.cu" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CPU_algorithm.cuh" />
+    <ClInclude Include="GPU_algorithm.cuh" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
