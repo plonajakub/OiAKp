@@ -61,9 +61,8 @@ __global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch
 
 __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, double *matrixAB, Result &outputData) {
 
-	const int threadsPerBlock = 32;
-	const int blocksPerGridDimX = ceil((degreeOfMatrixA + 1) / (double)threadsPerBlock);
-	const int blocksPerGridDimY = ceil(degreeOfMatrixA / (double)threadsPerBlock);
+	const int blocksPerGridDimX = ceil((degreeOfMatrixA + 1) / (double)defaultThreadsPerBlock);
+	const int blocksPerGridDimY = ceil(degreeOfMatrixA / (double)defaultThreadsPerBlock);
 
 	int baseRowIdx;
 	double columnDivider;
@@ -86,7 +85,7 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
 			// Exchange rows (vectors)
-			swapMatrixRowsParallel <<<blocksPerGridDimX, threadsPerBlock, 2 * threadsPerBlock * sizeof(double)>>>
+			swapMatrixRowsParallel <<<blocksPerGridDimX, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
 				(matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
 			baseRowIdx = colIdx;
 		}
@@ -97,13 +96,13 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		columnDivider = getEl(matrixAB, double, pitch, baseRowIdx, colIdx);
 
 		// Divide row (vector) by constant
-		divideMatrixRowByConstantParallel<<<blocksPerGridDimX, threadsPerBlock, threadsPerBlock * sizeof(double)>>>
+		divideMatrixRowByConstantParallel<<<blocksPerGridDimX, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
 			(matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
 
 		cudaDeviceSynchronize();
 
 		// Perform multiple rows (vectors) subtraction
-		performMatrixVerticalRowSubtraction<<<blocksPerGridDimY, threadsPerBlock, threadsPerBlock * sizeof(double)>>>
+		performMatrixVerticalRowSubtraction<<<blocksPerGridDimY, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
 			(matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
@@ -111,9 +110,6 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 gpu_info solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 	// Error code holder
 	cudaError_t cudaStatus;
-
-	// Configuration of shared memory banks' size
-	cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
 	// Returned data
 	gpu_info info = {Result::SUCCESS, 0.0};
@@ -212,7 +208,7 @@ Cleanup:
 
 
 int main(int argc, char *argv[]) {
-	const int MATRIX_DEGREE = 5;
+	const int MATRIX_DEGREE = 1500;
 
 	// Host allocation
 	double **matrixAB = nullptr;
@@ -223,13 +219,13 @@ int main(int argc, char *argv[]) {
 	matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 
 	// Print generated matrix
-	std::cout << "Matrix [A|B]:" << std::endl;
+	/*std::cout << "Matrix [A|B]:" << std::endl;
 	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 	std::cout << std::endl;
 
 	std::cout << "Copy of matrix [A|B]:" << std::endl;
 	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
 		std::cout << "Created linear system is correct!" << std::endl;
@@ -257,12 +253,12 @@ int main(int argc, char *argv[]) {
 	}
 
 	// Present results
-	std::cout << std::endl;
+	/*std::cout << std::endl;
 	std::cout << "Solved linear system:" << std::endl;
 	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 
 	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
 		std::cout << "Solution vector is correct!" << std::endl;
@@ -272,7 +268,7 @@ int main(int argc, char *argv[]) {
 		std::cout << "Error: " << Utils::getLSSolutionError(MATRIX_DEGREE, matrixAB_copy, matrixAB) << std::endl;
 	}
 	
-	std::cout << "Calculations time: " << info.time << " ms" << std::endl;
+	std::cout << "Elapsed time: " << info.time << " ms" << std::endl;
 
 	// Host memory cleanup
 	Utils::DeleteMatrix(matrixAB, MATRIX_DEGREE);

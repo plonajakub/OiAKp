@@ -2,19 +2,17 @@
 #include <stdexcept>
 #include <iomanip>
 #include <cstring>
+#include <chrono>
 
 #include "Utils.h"
 #include "CPU_algorithm.cuh"
-
-// For debug purposes
-#define pAB Utils::printMatrix(matrixAB, degreeOfMatrixA, degreeOfMatrixA + 1)
 
 
 // Operations are being conducted in-place
 void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 	int baseRowIdx;
 	double columnDivider, subtractCoeff;
-	//pAB;
+
 	for (int colIdx = 0; colIdx < degreeOfMatrixA; ++colIdx) {
 		// Choose base row
 		baseRowIdx = -1;
@@ -24,6 +22,7 @@ void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 				break;
 			}
 		}
+
 		if (baseRowIdx == -1) {
 			throw std::invalid_argument("Column can't contain zeros only");
 		}
@@ -35,125 +34,86 @@ void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 			}
 			baseRowIdx = colIdx;
 		}
-		//pAB;
+
 		// Chosen row's normalization
 		columnDivider = matrixAB[baseRowIdx][colIdx];
 		// Could be implemented as parallel operation (vector by constant division)
 		for (int colNormIdx = colIdx; colNormIdx < degreeOfMatrixA + 1; ++colNormIdx) {
 			matrixAB[baseRowIdx][colNormIdx] /= columnDivider;
-			//pAB;
 		}
+
 		// Perform row subtraction
 		// Could be implemented as parallel operation (multiple vectors subtraction)
 		for (int rowSubIdx = 0; rowSubIdx < degreeOfMatrixA; ++rowSubIdx) {
 			if (rowSubIdx == baseRowIdx || matrixAB[rowSubIdx][colIdx] == 0) {
 				continue;
 			}
-			//pAB;
 			subtractCoeff = matrixAB[rowSubIdx][colIdx];
 			for (int colSubIdx = colIdx; colSubIdx < degreeOfMatrixA + 1; ++colSubIdx) {
 				matrixAB[rowSubIdx][colSubIdx] -= subtractCoeff * matrixAB[baseRowIdx][colSubIdx];
-				//pAB;
 			}
 		}
 	}
 }
 
 //int main(int argc, char *argv[]) {
-//	const int RANK = 4;
-//	/*double matrixAB[4][4] = {
-//		{2, 2, 2, 3},
-//		{3, 4, 5, 6},
-//		{2, 6, 5, 4},
-//		{1, 4, 1, 2}
-//	};
-//	double matrixB[4][1] = {
-//		{2},
-//		{4},
-//		{2},
-//		{2}
-//	};*/
-//	/*
-//		Solution:  -0.6
-//					0.1
-//				   -0.6
-//					1.4
+//	const int MATRIX_DEGREE = 1000;
 //
-//	*/
-//	double **matrixAB = new double*[RANK];
-//	for (int i = 0; i < RANK; ++i) {
-//		matrixAB[i] = new double[RANK + 1];
-//	}
+//	// Create a linear system
+//	double **matrixAB = nullptr;
+//	Utils::GenMatrix(&matrixAB, MATRIX_DEGREE, 0);
 //
-//	// A
-//	matrixAB[0][0] = 2;
-//	matrixAB[0][1] = 2;
-//	matrixAB[0][2] = 2;
-//	matrixAB[0][3] = 3;
+//	// Store copy of the linear system
+//	double **matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //
-//	matrixAB[1][0] = 3;
-//	matrixAB[1][1] = 4;
-//	matrixAB[1][2] = 5;
-//	matrixAB[1][3] = 6;
-//
-//	matrixAB[2][0] = 2;
-//	matrixAB[2][1] = 6;
-//	matrixAB[2][2] = 5;
-//	matrixAB[2][3] = 4;
-//
-//	matrixAB[3][0] = 1;
-//	matrixAB[3][1] = 4;
-//	matrixAB[3][2] = 1;
-//	matrixAB[3][3] = 2;
-//
-//	// B
-//	matrixAB[0][4] = 2;
-//	matrixAB[1][4] = 4;
-//	matrixAB[2][4] = 2;
-//	matrixAB[3][4] = 2;
-//
-//	double **matrixAB_copy = new double*[RANK];
-//	for (int i = 0; i < RANK; ++i) {
-//		matrixAB_copy[i] = new double[RANK + 1];
-//		std::memcpy(matrixAB_copy[i], matrixAB[i], (RANK + 1) * sizeof(double));
-//	}
-//
-//	std::cout << "Matrix [A|B]:" << std::endl;
-//	Utils::printMatrix(matrixAB, RANK, RANK + 1);
+//	// Show created linear system
+//	/*std::cout << "Matrix [A|B]:" << std::endl;
+//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //	std::cout << std::endl;
 //
 //	std::cout << "Copy of matrix [A|B]:" << std::endl;
-//	Utils::printMatrix(matrixAB_copy, RANK, RANK + 1);
-//	std::cout << std::endl;
+//	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	std::cout << std::endl;*/
 //
-//	if (Utils::checkLinearSystem) {
+//	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
 //		std::cout << "Created linear system is correct!" << std::endl;
 //	}
 //	else {
 //		std::cout << "Created linear system is incorrect!" << std::endl;
 //	}
 //
-//	solveLinearSystem(RANK, matrixAB);
-//	std::cout << std::endl;
-//	std::cout << "Solved linear system:" << std::endl;
-//	Utils::printMatrix(matrixAB, RANK, RANK + 1);
+//	auto start = std::chrono::high_resolution_clock::now();
+//	auto end = std::chrono::high_resolution_clock::now();
+//	std::chrono::duration<double, std::milli> elapsed;
 //
-//	Utils::printSolutionVectorFromMatrix(RANK, matrixAB);
-//	std::cout << std::endl;
-//	if (Utils::checkLSSolution(RANK, matrixAB_copy, matrixAB)) {
+//	start = std::chrono::high_resolution_clock::now();
+//	
+//	// Solve the linear system
+//	solveLinearSystem(MATRIX_DEGREE, matrixAB);
+//	
+//	end = std::chrono::high_resolution_clock::now();
+//	elapsed = end - start;
+//
+//	// Show results
+//	/*std::cout << std::endl;
+//	std::cout << "Solved linear system:" << std::endl;
+//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
+//	std::cout << std::endl;*/
+//
+//	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
 //		std::cout << "Solution vector is correct!" << std::endl;
 //	}
 //	else {
 //		std::cout << "Solution vector is incorrect! (small floating-point operations' errors are possible)" << std::endl;
-//		std::cout << "Error: " << Utils::getLSSolutionError(RANK, matrixAB_copy, matrixAB) << std::endl;
+//		std::cout << "Error: " << Utils::getLSSolutionError(MATRIX_DEGREE, matrixAB_copy, matrixAB) << std::endl;
 //	}
+//
+//	std::cout << "Elapsed time: " << elapsed.count() << " ms" << std::endl;
 //	
-//	for (int i = 0; i < RANK; ++i) {
-//		delete[] matrixAB[i];
-//		delete matrixAB_copy[i];
-//	}
-//	delete[] matrixAB;
-//	delete[] matrixAB_copy;
+//	// Cleanup
+//	Utils::DeleteMatrix(matrixAB, MATRIX_DEGREE);
+//	Utils::DeleteMatrix(matrixAB_copy, MATRIX_DEGREE);
 //
 //	return 0;
 //}
