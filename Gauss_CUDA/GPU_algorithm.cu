@@ -207,72 +207,72 @@ Cleanup:
 }
 
 
-int main(int argc, char *argv[]) {
-	const int MATRIX_DEGREE = 1500;
-
-	// Host allocation
-	double **matrixAB = nullptr;
-	Utils::GenMatrix(&matrixAB, MATRIX_DEGREE, 0);
-
-	// Create copy of matrixAB
-	double **matrixAB_copy = nullptr;
-	matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-
-	// Print generated matrix
-	/*std::cout << "Matrix [A|B]:" << std::endl;
-	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-	std::cout << std::endl;
-
-	std::cout << "Copy of matrix [A|B]:" << std::endl;
-	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-	std::cout << std::endl;*/
-
-	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
-		std::cout << "Created linear system is correct!" << std::endl;
-	}
-	else {
-		std::cout << "Created linear system is incorrect!" << std::endl;
-	}
-
-	// Solve linear system on GPU
-	gpu_info info;
-	info = solveLinearSystemParallel(MATRIX_DEGREE, matrixAB);
-
-	switch (info.result) {
-	case SUCCESS:
-		std::cout << "solverLinearSystemParallel() returned without errors!" << std::endl;
-		break;
-	case CUDA_ERROR:
-		std::cout << "solverLinearSystemParallel() returned cuda error!" << std::endl;
-		break;
-	case ALGORITHM_ERROR:
-		std::cout << "solverLinearSystemParallel() returned algorithm error!" << std::endl;
-		break;
-	default:
-		break;
-	}
-
-	// Present results
-	/*std::cout << std::endl;
-	std::cout << "Solved linear system:" << std::endl;
-	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-
-	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
-	std::cout << std::endl;*/
-
-	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
-		std::cout << "Solution vector is correct!" << std::endl;
-	}
-	else {
-		std::cout << "Solution vector is incorrect! (small floating-point operations' errors are possible)" << std::endl;
-		std::cout << "Error: " << Utils::getLSSolutionError(MATRIX_DEGREE, matrixAB_copy, matrixAB) << std::endl;
-	}
-	
-	std::cout << "Elapsed time: " << info.time << " ms" << std::endl;
-
-	// Host memory cleanup
-	Utils::DeleteMatrix(matrixAB, MATRIX_DEGREE);
-	Utils::DeleteMatrix(matrixAB_copy, MATRIX_DEGREE);
-
-	return 0;
-}
+//int main(int argc, char *argv[]) {
+//	const int MATRIX_DEGREE = 5;
+//
+//	// Host allocation
+//	double **matrixAB = nullptr;
+//	Utils::GenMatrix(&matrixAB, MATRIX_DEGREE);
+//
+//	// Create copy of matrixAB
+//	double **matrixAB_copy = nullptr;
+//	matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//
+//	// Print generated matrix
+//	std::cout << "Matrix [A|B]:" << std::endl;
+//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	std::cout << std::endl;
+//
+//	std::cout << "Copy of matrix [A|B]:" << std::endl;
+//	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	std::cout << std::endl;
+//
+//	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
+//		std::cout << "Created linear system is correct!" << std::endl;
+//	}
+//	else {
+//		std::cout << "Created linear system is incorrect!" << std::endl;
+//	}
+//
+//	// Solve linear system on GPU
+//	gpu_info info;
+//	info = solveLinearSystemParallel(MATRIX_DEGREE, matrixAB);
+//
+//	switch (info.result) {
+//	case SUCCESS:
+//		std::cout << "solveLinearSystemParallel() returned without errors!" << std::endl;
+//		break;
+//	case CUDA_ERROR:
+//		std::cout << "solveLinearSystemParallel() returned cuda error!" << std::endl;
+//		break;
+//	case ALGORITHM_ERROR:
+//		std::cout << "solveLinearSystemParallel() returned algorithm error!" << std::endl;
+//		break;
+//	default:
+//		break;
+//	}
+//
+//	// Present results
+//	std::cout << std::endl;
+//	std::cout << "Solved linear system:" << std::endl;
+//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//
+//	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
+//	std::cout << std::endl;
+//
+//	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
+//		std::cout << "Solution vector is correct!" << std::endl;
+//	}
+//	else {
+//		std::cout << "Solution vector is incorrect! (small floating-point operations' errors are possible)" << std::endl;
+//		std::cout << "Error: " << Utils::getLSSolutionError(MATRIX_DEGREE, matrixAB_copy, matrixAB) << std::endl;
+//	}
+//	
+//	std::cout << "Elapsed time: " << info.time << " ms" << std::endl;
+//
+//	// Host memory cleanup
+//	Utils::DeleteMatrix(matrixAB, MATRIX_DEGREE);
+//	Utils::DeleteMatrix(matrixAB_copy, MATRIX_DEGREE);
+//
+//	return 0;
+//}

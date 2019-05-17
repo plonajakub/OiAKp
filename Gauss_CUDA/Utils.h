@@ -43,13 +43,12 @@ public:
 	};
 
 	static void DeleteMatrix(double **matrix, int size) {
-		if (matrix == nullptr)
+		if (matrix == nullptr || size < 1)
 			return;
 
 		for (int i(size - 1); i >= 0; i--)
 			delete[] matrix[i];
 		delete matrix;
-		matrix = nullptr;
 	}
 
 	static double **DuplicateMatrix(double **matrix, int row_size, int col_size) {
@@ -120,9 +119,7 @@ public:
 	}
 
 	//generate random matrix with one solution
-	static void GenMatrix(double ***matrix, int size_new, int size_old) {
-		DeleteMatrix(*matrix, size_old);
-
+	static void GenMatrix(double ***matrix, int size_new) {
 		(*matrix) = new double*[size_new];
 		for (int i(0); i < size_new; i++)
 			(*matrix)[i] = new double[size_new + 1];
@@ -264,23 +261,25 @@ public:
 
 	template <class T>
 	static void printMatrix(T **matrix, int rowNum, int colNum) {
+		const int fieldWidth = 10;
 		for (int i = 0; i < rowNum; ++i) {
 			std::cout << '[';
 			for (int j = 0; j < colNum - 1; ++j) {
-				std::cout << std::setw(4) << matrix[i][j] << ',';
+				std::cout << std::setw(fieldWidth) << matrix[i][j] << ',';
 			}
-			std::cout << std::setw(4) << matrix[i][colNum - 1] << ']' << std::endl;
+			std::cout << std::setw(fieldWidth) << matrix[i][colNum - 1] << ']' << std::endl;
 		}
 	}
 
 	template <class T>
 	static void printSolutionVectorFromMatrix(int degreeOfMatrixA, T **matrixAB) {
+		const int fieldWidth = 11;
 		std::cout << std::endl << "Solution vector:" << std::endl;
-		std::cout << '[' << std::setw(4) << matrixAB[0][degreeOfMatrixA] << std::endl;
+		std::cout << '[' << std::setw(fieldWidth - 1) << matrixAB[0][degreeOfMatrixA] << std::endl;
 		for (int i = 1; i < degreeOfMatrixA - 1; ++i) {
-			std::cout << std::setw(5) << matrixAB[i][degreeOfMatrixA] << std::endl;
+			std::cout << std::setw(fieldWidth) << matrixAB[i][degreeOfMatrixA] << std::endl;
 		}
-		std::cout << std::setw(5) << matrixAB[degreeOfMatrixA - 1][degreeOfMatrixA] << " ]" << std::endl;
+		std::cout << std::setw(fieldWidth) << matrixAB[degreeOfMatrixA - 1][degreeOfMatrixA] << " ]" << std::endl;
 	}
 };
 

@@ -57,23 +57,23 @@ void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 }
 
 //int main(int argc, char *argv[]) {
-//	const int MATRIX_DEGREE = 1000;
+//	const int MATRIX_DEGREE = 5;
 //
 //	// Create a linear system
 //	double **matrixAB = nullptr;
-//	Utils::GenMatrix(&matrixAB, MATRIX_DEGREE, 0);
+//	Utils::GenMatrix(&matrixAB, MATRIX_DEGREE);
 //
 //	// Store copy of the linear system
 //	double **matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //
 //	// Show created linear system
-//	/*std::cout << "Matrix [A|B]:" << std::endl;
+//	std::cout << "Matrix [A|B]:" << std::endl;
 //	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //	std::cout << std::endl;
 //
 //	std::cout << "Copy of matrix [A|B]:" << std::endl;
 //	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-//	std::cout << std::endl;*/
+//	std::cout << std::endl;
 //
 //	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
 //		std::cout << "Created linear system is correct!" << std::endl;
@@ -95,11 +95,11 @@ void solveLinearSystem(int degreeOfMatrixA, double **matrixAB) {
 //	elapsed = end - start;
 //
 //	// Show results
-//	/*std::cout << std::endl;
+//	std::cout << std::endl;
 //	std::cout << "Solved linear system:" << std::endl;
 //	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
-//	std::cout << std::endl;*/
+//	std::cout << std::endl;
 //
 //	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
 //		std::cout << "Solution vector is correct!" << std::endl;
