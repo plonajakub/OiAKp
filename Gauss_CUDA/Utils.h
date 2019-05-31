@@ -49,6 +49,7 @@ public:
 		for (int i(size - 1); i >= 0; i--)
 			delete[] matrix[i];
 		delete matrix;
+		matrix = nullptr;
 	}
 
 	static double **DuplicateMatrix(double **matrix, int row_size, int col_size) {
