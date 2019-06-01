@@ -1,3 +1,6 @@
+
+#define defaultThreadsPerBlock 32
+
 enum Result {
 	SUCCESS, CUDA_ERROR, ALGORITHM_ERROR
 };

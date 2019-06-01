@@ -12,26 +12,33 @@ int main(int argc, char *argv[]) {
 	bool gpu_timeout(false);
 	int max_gpu_time(15);
 	int step(25);
-	int size(0);
+	int size(5);
+
 	double **matrix(nullptr), **matrix_copy(nullptr);
 	auto start = std::chrono::high_resolution_clock::now();
 	auto finish = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double, std::milli> elapsed;
+	std::chrono::duration<double> elapsed;
 	std::ofstream out;
 	gpu_info info;
 
 	std::cout << "GPU timeout[s]: ";
 	std::cin >> max_gpu_time;
+	std::cout << "Starting size: ";
+	std::cin >> size;
 	std::cout << "Step size: ";
 	std::cin >> step;
 
-	out.open("log\\time.csv");
+	std::cout << std::endl << "Running..." << std::endl;
+
+	out.open("log\\gauss_time.csv");
 	if (!out.is_open()) {
-		throw std::exception("time.csv not opened!");
+		throw std::exception("gauss_time.csv not opened!");
 	}
-	out << "Stopieñ macierzy g³ownej uk³adu,Czas obliczeñ CPU,Czas obliczeñ GPU\n";
-	for (size = step; !gpu_timeout; size += step) {
-		std::cout << "Current size: " << size << std::endl;
+	out << "Rozmiar pocz\u0105tkowy = " << size << ",Krok = " << step << ",Limit czasu GPU = "
+		<< max_gpu_time << "s,Liczba w\u0105tk\u00F3w w bloku = " << defaultThreadsPerBlock << std::endl;
+	out << "Stopie\u0144 macierzy g\u0142ownej uk\u0142adu,Czas oblicze\u0144 CPU [s],Czas oblicze\u0144 GPU [s]" << std::endl;
+	for (; !gpu_timeout; size += step) {
+		std::cout << "Current matrix degree: " << size << std::endl;
 		out << size << ',';
 		Utils::DeleteMatrix(matrix, size - step);
 		Utils::DeleteMatrix(matrix_copy, size - step);
@@ -48,7 +55,7 @@ int main(int argc, char *argv[]) {
 		info = solveLinearSystemParallel(size, matrix_copy);
 		switch (info.result) {
 		case SUCCESS:
-			out << info.time;
+			out << info.time / 1000;
 			break;
 		case CUDA_ERROR:
 			out << "CUDA_ERROR";
@@ -61,7 +68,7 @@ int main(int argc, char *argv[]) {
 		}
 		if (info.time / 1000 >= max_gpu_time)
 			gpu_timeout = true;
-		out << '\n';
+		out << std::endl;
 		if (info.result != Result::SUCCESS)
 			break;
 	}

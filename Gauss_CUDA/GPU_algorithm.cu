@@ -9,7 +9,7 @@
 #include "GPU_algorithm.cuh"
 
 #define getEl(matrix, type, pitch, row, col) (*((type*)((char*)matrix + pitch * row + sizeof(type) * col)))
-#define defaultThreadsPerBlock (32)
+
 
 __global__ void swapMatrixRowsParallel(double *matrix, size_t pitch, int matrixDimX, int rowIdx1, int rowIdx2) {
 	int colIdx = blockIdx.x * blockDim.x + threadIdx.x;
