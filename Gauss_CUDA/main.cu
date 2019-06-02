@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <chrono>
+#include <string>
 
 #include "Utils.h"
 #include "CPU_algorithm.cuh"
@@ -13,6 +14,7 @@ int main(int argc, char *argv[]) {
 	int max_gpu_time(15);
 	int step(25);
 	int size(5);
+	int threadsPerBlock;
 
 	double **matrix(nullptr), **matrix_copy(nullptr);
 	auto start = std::chrono::high_resolution_clock::now();
@@ -27,15 +29,18 @@ int main(int argc, char *argv[]) {
 	std::cin >> size;
 	std::cout << "Step size: ";
 	std::cin >> step;
+	std::cout << "Threads per block: ";
+	std::cin >> threadsPerBlock;
 
 	std::cout << std::endl << "Running..." << std::endl;
 
-	out.open("log\\gauss_time.csv");
+	std::string fileName = std::string("log\\gauss_time") + "_" + std::to_string(threadsPerBlock) + "_threads" + ".csv";
+	out.open(fileName);
 	if (!out.is_open()) {
-		throw std::exception("gauss_time.csv not opened!");
+		throw std::exception();
 	}
 	out << "Rozmiar pocz\u0105tkowy = " << size << ",Krok = " << step << ",Limit czasu GPU = "
-		<< max_gpu_time << "s,Liczba w\u0105tk\u00F3w w bloku = " << defaultThreadsPerBlock << std::endl;
+		<< max_gpu_time << "s,Liczba w\u0105tk\u00F3w w bloku = " << threadsPerBlock << std::endl;
 	out << "Stopie\u0144 macierzy g\u0142ownej uk\u0142adu,Czas oblicze\u0144 CPU [s],Czas oblicze\u0144 GPU [s]" << std::endl;
 	for (; !gpu_timeout; size += step) {
 		std::cout << "Current matrix degree: " << size << std::endl;
@@ -52,7 +57,7 @@ int main(int argc, char *argv[]) {
 		out << elapsed.count();
 		out << ',';
 
-		info = solveLinearSystemParallel(size, matrix_copy);
+		info = solveLinearSystemParallel(threadsPerBlock, size, matrix_copy);
 		switch (info.result) {
 		case SUCCESS:
 			out << info.time / 1000;

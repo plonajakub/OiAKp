@@ -43,26 +43,26 @@ __global__ void subtracMatrixRows(double *matrix, size_t pitch, int matrixDimX, 
 	}
 }
 
-__global__ void performMatrixVerticalRowSubtraction(double *matrix, size_t pitch, int matrixDimX, int matrixDimY, int baseRowIdx, int baseColIdx) {
+__global__ void performMatrixVerticalRowSubtraction(int threadsPerBlock, double *matrix, size_t pitch, int matrixDimX, int matrixDimY, int baseRowIdx, int baseColIdx) {
 	int rowIdx = blockIdx.x * blockDim.x + threadIdx.x;
 	extern __shared__ double subtracCoeffs[];
 	if (rowIdx < matrixDimY && rowIdx != baseRowIdx) {
 		subtracCoeffs[threadIdx.x] = getEl(matrix, double, pitch, rowIdx, baseColIdx);
 		if (subtracCoeffs[threadIdx.x] != 0) {
-			const int blocksPerGridDimX = ceil((matrixDimX) / (double)defaultThreadsPerBlock);
+			const int blocksPerGridDimX = ceil((matrixDimX) / (double)threadsPerBlock);
 			cudaStream_t stream;
 			cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-			subtracMatrixRows<<<blocksPerGridDimX, defaultThreadsPerBlock, 2 * defaultThreadsPerBlock * sizeof(double), stream>>>
+			subtracMatrixRows<<<blocksPerGridDimX, threadsPerBlock, 2 * threadsPerBlock * sizeof(double), stream>>>
 				(matrix, pitch, matrixDimX, baseRowIdx, rowIdx, subtracCoeffs[threadIdx.x]);
 			cudaStreamDestroy(stream);
 		}
 	}
 }
 
-__global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, double *matrixAB, Result &outputData) {
+__global__ void solveLinearSystemKernel(int threadsPerBlock, int degreeOfMatrixA, size_t pitch, double *matrixAB, Result &outputData) {
 
-	const int blocksPerGridDimX = ceil((degreeOfMatrixA + 1) / (double)defaultThreadsPerBlock);
-	const int blocksPerGridDimY = ceil(degreeOfMatrixA / (double)defaultThreadsPerBlock);
+	const int blocksPerGridDimX = ceil((degreeOfMatrixA + 1) / (double)threadsPerBlock);
+	const int blocksPerGridDimY = ceil(degreeOfMatrixA / (double)threadsPerBlock);
 
 	int baseRowIdx;
 	double columnDivider;
@@ -85,7 +85,7 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		// Exchange rows if columnDivider isn't matrixAB[colIdx][colIdx]
 		else if (baseRowIdx != colIdx) {
 			// Exchange rows (vectors)
-			swapMatrixRowsParallel <<<blocksPerGridDimX, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
+			swapMatrixRowsParallel <<<blocksPerGridDimX, threadsPerBlock, threadsPerBlock * sizeof(double)>>>
 				(matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, colIdx);
 			baseRowIdx = colIdx;
 		}
@@ -96,18 +96,18 @@ __global__ void solveLinearSystemKernel(int degreeOfMatrixA, size_t pitch, doubl
 		columnDivider = getEl(matrixAB, double, pitch, baseRowIdx, colIdx);
 
 		// Divide row (vector) by constant
-		divideMatrixRowByConstantParallel<<<blocksPerGridDimX, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
+		divideMatrixRowByConstantParallel<<<blocksPerGridDimX, threadsPerBlock, threadsPerBlock * sizeof(double)>>>
 			(matrixAB, pitch, degreeOfMatrixA + 1, baseRowIdx, columnDivider);
 
 		cudaDeviceSynchronize();
 
 		// Perform multiple rows (vectors) subtraction
-		performMatrixVerticalRowSubtraction<<<blocksPerGridDimY, defaultThreadsPerBlock, defaultThreadsPerBlock * sizeof(double)>>>
-			(matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
+		performMatrixVerticalRowSubtraction<<<blocksPerGridDimY, threadsPerBlock, threadsPerBlock * sizeof(double)>>>
+			(threadsPerBlock, matrixAB, pitch, degreeOfMatrixA + 1, degreeOfMatrixA, baseRowIdx, colIdx);
 	}
 }
 
-gpu_info solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
+gpu_info solveLinearSystemParallel(int threadsPerBlock, int degreeOfMatrixA, double **matrixAB) {
 	// Error code holder
 	cudaError_t cudaStatus;
 
@@ -149,7 +149,7 @@ gpu_info solveLinearSystemParallel(int degreeOfMatrixA, double **matrixAB) {
 	cudaEventRecord(start);
 
 	// Kernel launch
-	solveLinearSystemKernel<<<1, 1>>>(degreeOfMatrixA, pitch, devMatrixAB, info.result); 
+	solveLinearSystemKernel<<<1, 1>>>(threadsPerBlock, degreeOfMatrixA, pitch, devMatrixAB, info.result);
 
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess) {
@@ -208,7 +208,7 @@ Cleanup:
 
 
 //int main(int argc, char *argv[]) {
-//	const int MATRIX_DEGREE = 5;
+//	const int MATRIX_DEGREE = 1500;
 //
 //	// Host allocation
 //	double **matrixAB = nullptr;
@@ -218,14 +218,14 @@ Cleanup:
 //	double **matrixAB_copy = nullptr;
 //	matrixAB_copy = Utils::DuplicateMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //
-//	// Print generated matrix
-//	std::cout << "Matrix [A|B]:" << std::endl;
-//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-//	std::cout << std::endl;
+//	//// Print generated matrix
+//	//std::cout << "Matrix [A|B]:" << std::endl;
+//	//Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	//std::cout << std::endl;
 //
-//	std::cout << "Copy of matrix [A|B]:" << std::endl;
-//	Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
-//	std::cout << std::endl;
+//	//std::cout << "Copy of matrix [A|B]:" << std::endl;
+//	//Utils::printMatrix(matrixAB_copy, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	//std::cout << std::endl;
 //
 //	if (Utils::checkLinearSystem(MATRIX_DEGREE, matrixAB)) {
 //		std::cout << "Created linear system is correct!" << std::endl;
@@ -252,13 +252,13 @@ Cleanup:
 //		break;
 //	}
 //
-//	// Present results
-//	std::cout << std::endl;
-//	std::cout << "Solved linear system:" << std::endl;
-//	Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
+//	//// Present results
+//	//std::cout << std::endl;
+//	//std::cout << "Solved linear system:" << std::endl;
+//	//Utils::printMatrix(matrixAB, MATRIX_DEGREE, MATRIX_DEGREE + 1);
 //
-//	Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
-//	std::cout << std::endl;
+//	//Utils::printSolutionVectorFromMatrix(MATRIX_DEGREE, matrixAB);
+//	//std::cout << std::endl;
 //
 //	if (Utils::checkLSSolution(MATRIX_DEGREE, matrixAB_copy, matrixAB)) {
 //		std::cout << "Solution vector is correct!" << std::endl;
