@@ -85,7 +85,7 @@ public:
 			for (int j(i + 1); j < size; j++)
 			{
 				//max element(diagonal) == 0 => det == 0
-				if (mult[i][i] == 0)
+				if (abs(mult[size - 1][size - 1]) < 0.001)
 				{
 					solvable = false;
 					break;
